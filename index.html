@@ -77,7 +77,7 @@ img{max-width:100%;display:block}
 /* ====================== HERO ====================== */
 .hero{position:relative;height:100vh;min-height:600px;display:flex;align-items:center;justify-content:center;text-align:center}
 .hero-video-wrap{position:absolute;inset:0;overflow:hidden}
-.hero-video-wrap canvas{width:100%;height:100%;display:block}
+.hero-video-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1}
 .hero-video-wrap .overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(11,11,15,0.5) 0%,rgba(11,11,15,0.7) 100%)}
 .hero-poster{position:absolute;inset:0;background:url('poster.jpg') center/cover no-repeat}
 .hero-content{position:relative;z-index:2;max-width:700px;padding:0 24px}
@@ -1138,21 +1138,50 @@ document.querySelectorAll('.popup-overlay').forEach(overlay => {
 const heroVideo = document.getElementById('heroVideo');
 const heroCanvas = document.getElementById('heroCanvas');
 const ctx = heroCanvas.getContext('2d');
+let animating = false;
+
 function resizeCanvas() {
-  heroCanvas.width = heroCanvas.offsetWidth;
-  heroCanvas.height = heroCanvas.offsetHeight;
+  const wrap = heroCanvas.parentElement;
+  heroCanvas.width = wrap.offsetWidth;
+  heroCanvas.height = wrap.offsetHeight;
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
+
 function drawFrame() {
+  if (!animating) { animating = true; }
   if (heroVideo.readyState >= 2) {
     ctx.drawImage(heroVideo, 0, 0, heroCanvas.width, heroCanvas.height);
   }
   requestAnimationFrame(drawFrame);
 }
-heroVideo.addEventListener('loadeddata', () => { resizeCanvas(); drawFrame(); });
-heroVideo.addEventListener('play', drawFrame);
-if (heroVideo.readyState >= 2) drawFrame();
+
+function tryPlay() {
+  heroVideo.play().then(() => {
+    if (!animating) drawFrame();
+  }).catch(() => {});
+}
+
+heroVideo.addEventListener('loadeddata', () => {
+  resizeCanvas();
+  tryPlay();
+});
+
+heroVideo.addEventListener('canplay', tryPlay);
+
+if (heroVideo.readyState >= 2) {
+  tryPlay();
+} else {
+  heroVideo.load();
+}
+
+// Fallback: play on first user interaction if autoplay was blocked
+['touchstart','click','scroll'].forEach(evt => {
+  document.addEventListener(evt, function firstInteraction() {
+    tryPlay();
+    document.removeEventListener(evt, firstInteraction);
+  }, { once: true, passive: true });
+});
 
 // Smooth scroll for anchor links
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
